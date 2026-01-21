@@ -1,0 +1,22 @@
+# Core LangGraph and LangChain
+langgraph>=0.2.0
+langchain>=0.1.0
+langchain-google-genai>=1.0.0
+
+# Vector Database (Local)
+chromadb>=0.4.22
+
+# Embeddings (Local)
+sentence-transformers>=2.3.0
+
+# Document Processing
+pypdf>=3.17.0
+python-docx>=1.1.0
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+
+# Optional but recommended
+tiktoken>=0.5.0  # Token counting
+beautifulsoup4>=4.12.0  # HTML parsing
