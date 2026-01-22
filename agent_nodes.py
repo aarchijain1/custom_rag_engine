@@ -1,14 +1,13 @@
 """
 Agent Nodes for LangGraph-based RAG system
 LLM-based routing (Gemini) + ChromaDB retrieval
-CLICKABLE URL SOURCES
+NO LangChain dependency
 """
 
 from typing import TypedDict, List, Dict, Any
 from vector_store import VectorStore
 from config import CLASSIFICATION_PROMPT, ENABLE_RAG_CLASSIFICATION
 from llm import llm
-
 
 # -------------------------------------------------------------------
 # STATE
@@ -21,13 +20,11 @@ class AgentState(TypedDict):
     use_rag: bool
     error: str
 
-
 # -------------------------------------------------------------------
 # VECTOR STORE (singleton)
 # -------------------------------------------------------------------
 
 vector_store = VectorStore()
-
 
 # -------------------------------------------------------------------
 # HELPERS
@@ -42,10 +39,8 @@ def create_initial_state(question: str) -> AgentState:
         "error": "",
     }
 
-
 def get_vector_store_stats() -> dict:
     return vector_store.get_stats()
-
 
 # -------------------------------------------------------------------
 # MASTER ROUTER (GEMINI)
@@ -61,11 +56,8 @@ def master_agent_node(state: AgentState) -> AgentState:
     )
 
     decision = response.content.strip().lower()
-
-    # Fail-safe → RAG
-    state["use_rag"] = (decision != "direct")
+    state["use_rag"] = (decision != "direct")  # Fail-safe → RAG
     return state
-
 
 # -------------------------------------------------------------------
 # ROUTING
@@ -74,65 +66,85 @@ def master_agent_node(state: AgentState) -> AgentState:
 def route_after_master(state: AgentState) -> str:
     return "retrieve" if state["use_rag"] else "answer_direct"
 
-
 # -------------------------------------------------------------------
 # RETRIEVAL
 # -------------------------------------------------------------------
 
 def retrieval_node(state: AgentState) -> AgentState:
     try:
-        state["retrieved_docs"] = vector_store.query(state["question"])
+        state["retrieved_docs"] = vector_store.search(state["question"])
     except Exception as e:
         state["error"] = str(e)
         state["retrieved_docs"] = []
 
     return state
 
-
 def route_after_retrieval(state: AgentState) -> str:
     return "answer_with_rag" if state["retrieved_docs"] else "answer_direct"
 
-
 # -------------------------------------------------------------------
-# ANSWER WITH RAG (CLICKABLE URLs)
+# ANSWER WITH RAG (NO SOURCES)
 # -------------------------------------------------------------------
 
 def answer_with_rag_node(state: AgentState) -> AgentState:
-    """
-    Uses Gemini to synthesize a clean answer from retrieved documents
-    and appends clickable source URLs.
-    """
-
     docs = state["retrieved_docs"]
 
     if not docs:
         state["final_answer"] = "No relevant documents found."
         return state
 
-    # Build context for Gemini
-    context_blocks = []
-    urls = set()
-
-    for doc in docs:
-        content = doc.get("content", "").strip()
-        meta = doc.get("metadata", {})
-
-        if content:
-            context_blocks.append(content)
-
-        if meta.get("url"):
-            urls.add(meta["url"])
-
+    context_blocks = [doc.get("content", "").strip() for doc in docs if doc.get("content")]
     context = "\n\n".join(context_blocks)
 
-    # Ask Gemini to summarize
     prompt = f"""
-You are answering based ONLY on the following Toyota Financial Services documents.
+You are a Toyota Financial Services expert assistant.
 
-Cover all the important details in your answer.
-Do NOT repeat text.
-Do NOT mention page numbers.
-Do NOT invent information.
+ Use ONLY the retrieved content to answer
+    3. Summarize the information in a user-friendly and concise way
+
+    ────────────────────
+    SCOPE & BEHAVIOR RULES
+    ────────────────────
+    - You can answer ONLY questions related to Toyota Financial Services (TFS)
+    - If the question is generic (e.g., “what is a computer?”), vague, or unrelated:
+    → Respond exactly with:
+    "I am a TFS assistant and can only answer questions related to Toyota Financial Services."
+
+    - If the question is a greeting (e.g., “hi”, “what is your name?”):
+    → Respond briefly:
+    "Hi, I’m the Toyota Financial Services virtual assistant."
+
+    - If no relevant information is found in the knowledge base:
+    → Say the query is out of scope or not available in TFS information
+
+    ────────────────────
+    ANSWER STYLE
+    ────────────────────
+    - Keep responses CLEAR, and CONCISE
+    - Cover all important points, but avoid repetition
+    - Use bullet points for lists
+    - Do NOT hallucinate or add extra details
+
+    ────────────────────
+    STRICT RULES
+    ────────────────────
+    - Do NOT answer from general knowledge
+    - Do NOT mention documents, PDFs, filenames, or internal systems
+    - Do NOT guess or infer beyond retrieved content
+
+    ────────────────────
+    SOURCES (MANDATORY & COMPLETE)
+    ────────────────────
+    At the end of every valid answer:
+
+    - Add heading exactly: Sources
+    - Include ALL unique public URLs (https://...) related to the user’s query
+    that appear in the retrieved results
+    - Do NOT summarize, shorten, or omit URLs
+    - One URL per line
+    - Do NOT include URLs that are not directly related to the question
+    - If no valid public URLs exist, omit the Sources section entirely
+        
 
 Context:
 {context}
@@ -144,22 +156,14 @@ Answer:
 """
 
     response = llm.invoke(prompt)
-
-    answer = response.content.strip()
-
-    # Append clickable sources
-    if urls:
-        answer += "\n\nSources:\n" + "\n".join(f"- {url}" for url in sorted(urls))
-
-    state["final_answer"] = answer
+    state["final_answer"] = response.content.strip()
     return state
-
-
 
 # -------------------------------------------------------------------
 # DIRECT ANSWER
 # -------------------------------------------------------------------
 
 def answer_direct_node(state: AgentState) -> AgentState:
-    state["final_answer"] = state["question"]
+    response = llm.invoke(state["question"])
+    state["final_answer"] = response.content.strip()
     return state

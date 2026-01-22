@@ -1,245 +1,179 @@
 """
-Vector Store Management using ChromaDB
-Handles document embedding and retrieval
+Vector Store with Auto-Reindexing
+Pure ChromaDB + SentenceTransformers
+NO LangChain
 """
+
+import os
+import json
+import hashlib
+from pathlib import Path
+from typing import List, Dict, Optional
 
 import chromadb
 from sentence_transformers import SentenceTransformer
-from typing import List, Dict, Optional
-from config import (
-    CHROMA_DB_PATH,
-    COLLECTION_NAME,
-    EMBEDDING_MODEL,
-    CHUNK_SIZE,
-    CHUNK_OVERLAP,
-    N_RETRIEVAL_RESULTS
-)
+
+# ---------------- CONFIG ---------------- #
+
+DOCS_DIR = "docs"
+CHROMA_DIR = "chroma_db"
+INDEX_STATE_FILE = ".index_state.json"
+
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+COLLECTION_NAME = "rag_documents"
+
+CHUNK_SIZE = 800
+CHUNK_OVERLAP = 150
+N_RETRIEVAL_RESULTS = 3
+
+# ---------------------------------------- #
 
 
 class VectorStore:
-    """Manages vector database operations"""
-
     def __init__(self):
-        print(f"Initializing vector store at: {CHROMA_DB_PATH}")
-
-        # ChromaDB client
-        self.client = chromadb.PersistentClient(path=str(CHROMA_DB_PATH))
-
-        # Embedding model
+        print(f"Initializing vector store at: {os.path.abspath(CHROMA_DIR)}")
         print(f"Loading embedding model: {EMBEDDING_MODEL}")
+
+        self.client = chromadb.PersistentClient(path=CHROMA_DIR)
         self.embedding_model = SentenceTransformer(EMBEDDING_MODEL)
 
-        # Collection
         self.collection = self.client.get_or_create_collection(
-            name=COLLECTION_NAME,
-            metadata={"description": "Local RAG document store"}
+            name=COLLECTION_NAME
         )
 
-        print(f"✓ Vector store initialized with {self.collection.count()} chunks")
+        print(f"✓ Vector store ready with {self.collection.count()} chunks")
 
-    # ------------------------------------------------------------------
-    # TEXT CHUNKING
-    # ------------------------------------------------------------------
+    # ---------------- Utility ---------------- #
 
-    def chunk_text(
-        self,
-        text: str,
-        chunk_size: int = CHUNK_SIZE,
-        overlap: int = CHUNK_OVERLAP
-    ) -> List[str]:
+    def _embed(self, texts: List[str]) -> List[List[float]]:
+        return self.embedding_model.encode(
+            texts, show_progress_bar=False
+        ).tolist()
 
-        if not text or not text.strip():
-            return []
-
+    def _chunk_text(self, text: str) -> List[str]:
         chunks = []
         start = 0
         length = len(text)
 
         while start < length:
-            end = start + chunk_size
+            end = start + CHUNK_SIZE
             chunk = text[start:end].strip()
-
             if chunk:
                 chunks.append(chunk)
-
-            start += chunk_size - overlap
+            start += CHUNK_SIZE - CHUNK_OVERLAP
 
         return chunks
 
-    # ------------------------------------------------------------------
-    # EMBEDDINGS
-    # ------------------------------------------------------------------
+    # ---------------- Indexing ---------------- #
 
-    def embed_texts(self, texts: List[str]) -> List[List[float]]:
-        embeddings = self.embedding_model.encode(
-            texts,
-            show_progress_bar=False,
-            convert_to_tensor=False
-        )
-        return embeddings.tolist()
+    def add_document(self, doc_id: str, text: str, metadata: Dict):
+        chunks = self._chunk_text(text)
+        embeddings = self._embed(chunks)
 
-    # ------------------------------------------------------------------
-    # ADD DOCUMENTS
-    # ------------------------------------------------------------------
-
-    def add_document(
-        self,
-        doc_id: str,
-        text: str,
-        metadata: Optional[Dict] = None
-    ) -> int:
-
-        if not text or not text.strip():
-            print(f"⚠ Skipping empty document: {doc_id}")
-            return 0
-
-        chunks = self.chunk_text(text)
-        if not chunks:
-            return 0
-
-        embeddings = self.embed_texts(chunks)
-
-        ids = [f"{doc_id}_chunk_{i}" for i in range(len(chunks))]
-
-        metadatas = [
-            {
-                **(metadata or {}),
-                "doc_id": doc_id,
-                "chunk_index": i,
-                "total_chunks": len(chunks),
-            }
-            for i in range(len(chunks))
-        ]
+        ids = [f"{doc_id}_{i}" for i in range(len(chunks))]
+        metadatas = [{**metadata, "doc_id": doc_id} for _ in chunks]
 
         self.collection.add(
-            ids=ids,
             documents=chunks,
             embeddings=embeddings,
-            metadatas=metadatas
+            ids=ids,
+            metadatas=metadatas,
         )
 
-        return len(chunks)
+    def clear(self):
+        self.collection.delete(where={})
 
-    def add_documents(self, documents: List[Dict]) -> Dict:
-        total_chunks = 0
-        success = 0
-        failed = []
+    # ---------------- Query ---------------- #
 
-        for doc in documents:
-            try:
-                chunks = self.add_document(
-                    doc_id=doc["id"],
-                    text=doc["text"],
-                    metadata=doc.get("metadata", {})
-                )
-
-                if chunks:
-                    total_chunks += chunks
-                    success += 1
-                    print(f"✓ Indexed: {doc['id']} ({chunks} chunks)")
-                else:
-                    failed.append(doc["id"])
-
-            except Exception as e:
-                failed.append(doc.get("id", "unknown"))
-                print(f"✗ Failed indexing {doc.get('id')}: {e}")
-
-        return {
-            "successful": success,
-            "failed": len(failed),
-            "total_chunks": total_chunks,
-            "failed_docs": failed,
-        }
-
-    # ------------------------------------------------------------------
-    # QUERY
-    # ------------------------------------------------------------------
-
-    def query(
-        self,
-        query_text: str,
-        n_results: int = N_RETRIEVAL_RESULTS
-    ) -> List[Dict]:
-
-        if not query_text or not query_text.strip():
-            return []
-
-        query_embedding = self.embed_texts([query_text])[0]
+    def search(self, query: str, k: int = N_RETRIEVAL_RESULTS) -> List[Dict]:
+        embedding = self._embed([query])[0]
 
         results = self.collection.query(
-            query_embeddings=[query_embedding],
-            n_results=min(n_results, self.collection.count())
+            query_embeddings=[embedding],
+            n_results=min(k, self.collection.count()),
         )
 
         docs = []
-
-        if not results or not results.get("documents"):
-            return docs
-
         for i in range(len(results["documents"][0])):
             docs.append({
                 "content": results["documents"][0][i],
-                "metadata": results["metadatas"][0][i] if results.get("metadatas") else {},
-                "distance": results["distances"][0][i] if results.get("distances") else None,
+                "metadata": results["metadatas"][0][i],
             })
 
         return docs
 
-    # ------------------------------------------------------------------
-    # DELETE / CLEAR
-    # ------------------------------------------------------------------
-
-    def delete_document(self, doc_id: str) -> bool:
-        try:
-            results = self.collection.get(where={"doc_id": doc_id})
-            if results and results["ids"]:
-                self.collection.delete(ids=results["ids"])
-                print(f"✓ Deleted document: {doc_id}")
-                return True
-            return False
-        except Exception as e:
-            print(f"✗ Delete failed: {e}")
-            return False
-
-    def clear_all(self) -> bool:
-        try:
-            self.client.delete_collection(COLLECTION_NAME)
-            self.collection = self.client.create_collection(
-                name=COLLECTION_NAME,
-                metadata={"description": "Local RAG document store"}
-            )
-            print("✓ Vector store cleared")
-            return True
-        except Exception as e:
-            print(f"✗ Clear failed: {e}")
-            return False
-
-    # ------------------------------------------------------------------
-    # STATS
-    # ------------------------------------------------------------------
+    # ---------------- Stats ---------------- #
 
     def get_stats(self) -> Dict:
-        count = self.collection.count()
-
-        unique_docs = set()
-        if count > 0:
-            results = self.collection.get()
-            for m in results.get("metadatas", []):
-                if m.get("doc_id"):
-                    unique_docs.add(m["doc_id"])
-
         return {
-            "total_chunks": count,
-            "unique_documents": len(unique_docs),
-            "collection_name": COLLECTION_NAME,
+            "total_chunks": self.collection.count(),
+            "collection": COLLECTION_NAME,
             "embedding_model": EMBEDDING_MODEL,
         }
 
 
-# ------------------------------------------------------------------
-# DEBUG
-# ------------------------------------------------------------------
+# ===================================================================
+# AUTO-INDEXING (hash-based)
+# ===================================================================
 
-if __name__ == "__main__":
-    store = VectorStore()
-    print(store.get_stats())
+def _file_hash(path: Path) -> str:
+    h = hashlib.md5()
+    with open(path, "rb") as f:
+        h.update(f.read())
+    return h.hexdigest()
+
+
+def _load_index_state() -> dict:
+    if os.path.exists(INDEX_STATE_FILE):
+        with open(INDEX_STATE_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+
+def _save_index_state(state: dict):
+    with open(INDEX_STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+
+
+def auto_index_documents(store: VectorStore):
+    os.makedirs(DOCS_DIR, exist_ok=True)
+
+    previous = _load_index_state()
+    current = {}
+
+    changed = False
+
+    for file in Path(DOCS_DIR).glob("*"):
+        if file.is_file():
+            file_hash = _file_hash(file)
+            current[file.name] = file_hash
+            if previous.get(file.name) != file_hash:
+                changed = True
+
+    if previous.keys() != current.keys():
+        changed = True
+
+    if not changed:
+        print("✅ No document changes detected.")
+        return
+
+    print("📄 Documents changed — rebuilding index...")
+
+    store.clear()
+
+    for file in Path(DOCS_DIR).glob("*"):
+        if not file.is_file():
+            continue
+
+        try:
+            text = file.read_text(encoding="utf-8", errors="ignore")
+            store.add_document(
+                doc_id=file.stem,
+                text=text,
+                metadata={"source": file.name},
+            )
+        except Exception as e:
+            print(f"⚠ Failed to index {file.name}: {e}")
+
+    _save_index_state(current)
+    print(f"✅ Index rebuilt ({store.collection.count()} chunks)")
