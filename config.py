@@ -22,7 +22,7 @@ if not GOOGLE_API_KEY:
 # ============================================================================
 
 # Gemini model settings
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 TEMPERATURE = 0.7
 MAX_OUTPUT_TOKENS = 2048
 
@@ -84,19 +84,27 @@ DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
 # Prompts
 # ============================================================================
 
-CLASSIFICATION_PROMPT = """You are a query classifier. Analyze the user query and decide:
+CLASSIFICATION_PROMPT = """
+You are a strict routing agent.
 
-User Query: "{query}"
+Use "rag" if:
+- The question asks about policies, rules, guidelines, definitions, procedures, or requirements
+- The question refers to documents, manuals, guides, contracts, leases, or company information
+- The question could reasonably depend on provided documents
+- The question is NOT basic math or common knowledge
 
-Should this query be answered using:
-A) RAG (document search) - for factual questions about specific topics in documents
-B) DIRECT - for general knowledge, greetings, simple questions, or conversational queries
+Use "direct" ONLY if:
+- The question is basic math
+- The question is general common knowledge (e.g., 2+2, capital of France)
+- The question is casual conversation
 
-Consider:
-- Use RAG for: "What does the document say about X?", "Find information on Y", technical questions
-- Use DIRECT for: "Hello", "How are you?", "What is 2+2?", general knowledge questions
+Question:
+{question}
 
-Respond with ONLY one word: 'RAG' or 'DIRECT'"""
+Answer with ONLY one word:
+rag or direct
+"""
+
 
 RAG_ANSWER_PROMPT = """You are a helpful assistant. Answer the user's question based ONLY on the provided context.
 

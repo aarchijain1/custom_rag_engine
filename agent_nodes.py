@@ -1,15 +1,17 @@
 """
 Agent Nodes for LangGraph-based RAG system
-NO LangChain message objects
-PURE Python + LangGraph
+LLM-based routing (Gemini) + ChromaDB retrieval
+CLICKABLE URL SOURCES
 """
 
 from typing import TypedDict, List, Dict, Any
 from vector_store import VectorStore
+from config import CLASSIFICATION_PROMPT, ENABLE_RAG_CLASSIFICATION
+from llm import llm
 
 
 # -------------------------------------------------------------------
-# State Schema (SINGLE SOURCE OF TRUTH)
+# STATE
 # -------------------------------------------------------------------
 
 class AgentState(TypedDict):
@@ -21,14 +23,14 @@ class AgentState(TypedDict):
 
 
 # -------------------------------------------------------------------
-# Vector Store (singleton-style)
+# VECTOR STORE (singleton)
 # -------------------------------------------------------------------
 
 vector_store = VectorStore()
 
 
 # -------------------------------------------------------------------
-# Helpers
+# HELPERS
 # -------------------------------------------------------------------
 
 def create_initial_state(question: str) -> AgentState:
@@ -37,7 +39,7 @@ def create_initial_state(question: str) -> AgentState:
         "retrieved_docs": [],
         "final_answer": "",
         "use_rag": False,
-        "error": ""
+        "error": "",
     }
 
 
@@ -46,42 +48,40 @@ def get_vector_store_stats() -> dict:
 
 
 # -------------------------------------------------------------------
-# Master Agent Node
+# MASTER ROUTER (GEMINI)
 # -------------------------------------------------------------------
 
 def master_agent_node(state: AgentState) -> AgentState:
-    """
-    Decide whether to use RAG or answer directly.
-    Simple heuristic to keep it deterministic.
-    """
-    question = state["question"].lower()
+    if not ENABLE_RAG_CLASSIFICATION:
+        state["use_rag"] = True
+        return state
 
-    rag_keywords = ["document", "file", "policy", "pdf", "data", "report"]
+    response = llm.invoke(
+        CLASSIFICATION_PROMPT.format(question=state["question"])
+    )
 
-    use_rag = any(word in question for word in rag_keywords)
+    decision = response.content.strip().lower()
 
-    state["use_rag"] = use_rag
+    # Fail-safe → RAG
+    state["use_rag"] = (decision != "direct")
     return state
 
 
 # -------------------------------------------------------------------
-# Routing after master
+# ROUTING
 # -------------------------------------------------------------------
 
 def route_after_master(state: AgentState) -> str:
-    if state["use_rag"]:
-        return "retrieve"
-    return "answer_direct"
+    return "retrieve" if state["use_rag"] else "answer_direct"
 
 
 # -------------------------------------------------------------------
-# Retrieval Node
+# RETRIEVAL
 # -------------------------------------------------------------------
 
 def retrieval_node(state: AgentState) -> AgentState:
     try:
-        docs = vector_store.search(state["question"], k=3)
-        state["retrieved_docs"] = docs
+        state["retrieved_docs"] = vector_store.query(state["question"])
     except Exception as e:
         state["error"] = str(e)
         state["retrieved_docs"] = []
@@ -89,37 +89,77 @@ def retrieval_node(state: AgentState) -> AgentState:
     return state
 
 
-# -------------------------------------------------------------------
-# Routing after retrieval
-# -------------------------------------------------------------------
-
 def route_after_retrieval(state: AgentState) -> str:
-    if state["retrieved_docs"]:
-        return "answer_with_rag"
-    return "answer_direct"
+    return "answer_with_rag" if state["retrieved_docs"] else "answer_direct"
 
 
 # -------------------------------------------------------------------
-# Answer Nodes
+# ANSWER WITH RAG (CLICKABLE URLs)
 # -------------------------------------------------------------------
 
 def answer_with_rag_node(state: AgentState) -> AgentState:
     """
-    Placeholder LLM logic.
-    Replace with Claude / Gemini later.
+    Uses Gemini to synthesize a clean answer from retrieved documents
+    and appends clickable source URLs.
     """
-    docs = state["retrieved_docs"]
-    context = "\n".join(doc.get("content", "") for doc in docs)
 
-    state["final_answer"] = (
-        "Answer generated using retrieved documents:\n\n" + context[:500]
-    )
+    docs = state["retrieved_docs"]
+
+    if not docs:
+        state["final_answer"] = "No relevant documents found."
+        return state
+
+    # Build context for Gemini
+    context_blocks = []
+    urls = set()
+
+    for doc in docs:
+        content = doc.get("content", "").strip()
+        meta = doc.get("metadata", {})
+
+        if content:
+            context_blocks.append(content)
+
+        if meta.get("url"):
+            urls.add(meta["url"])
+
+    context = "\n\n".join(context_blocks)
+
+    # Ask Gemini to summarize
+    prompt = f"""
+You are answering based ONLY on the following Toyota Financial Services documents.
+
+Cover all the important details in your answer.
+Do NOT repeat text.
+Do NOT mention page numbers.
+Do NOT invent information.
+
+Context:
+{context}
+
+Question:
+{state["question"]}
+
+Answer:
+"""
+
+    response = llm.invoke(prompt)
+
+    answer = response.content.strip()
+
+    # Append clickable sources
+    if urls:
+        answer += "\n\nSources:\n" + "\n".join(f"- {url}" for url in sorted(urls))
+
+    state["final_answer"] = answer
     return state
 
 
+
+# -------------------------------------------------------------------
+# DIRECT ANSWER
+# -------------------------------------------------------------------
+
 def answer_direct_node(state: AgentState) -> AgentState:
-    state["final_answer"] = (
-        "Direct answer (no documents used) for question:\n"
-        + state["question"]
-    )
+    state["final_answer"] = state["question"]
     return state
