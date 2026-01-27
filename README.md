@@ -1,4 +1,4 @@
-# Toyota Financial Services RAG Agent with FastMCP
+# RAG Agent with FastMCP
 
 A production-ready Retrieval Augmented Generation (RAG) agent built with **FastMCP**, LangGraph, Google Gemini, and ChromaDB. Uses **True Model Context Protocol** for process isolation and scalability.
 
