@@ -10,6 +10,7 @@ A fully local Retrieval Augmented Generation (RAG) agent built with LangGraph, G
 - **🔍 Smart Routing**: Automatically decides when to use RAG vs direct answers
 - **📄 Multi-Format Support**: TXT, PDF, DOCX, JSON, Markdown
 - **💾 Persistent Storage**: Local ChromaDB vector database
+- **⚡ Offline Indexing**: Pre-build embeddings before runtime with `index.py`
 - **🔧 Fully Configurable**: Easy customization via config.py
 - **🌐 No Cloud Required**: Runs entirely on your machine (except Gemini API calls)
 
@@ -45,19 +46,23 @@ A fully local Retrieval Augmented Generation (RAG) agent built with LangGraph, G
 ## 📁 Project Structure
 
 ```
-local-rag-agent/
+custom_rag_engine/
 ├── .env                    # API keys (create this)
 ├── requirements.txt        # Python dependencies
 ├── README.md              # This file
 │
 ├── config.py              # Configuration settings
+├── index.py               # Offline document indexing
+├── main.py                # Runtime chat interface
 ├── vector_store.py        # ChromaDB vector database manager
 ├── document_loader.py     # Multi-format document loader
 ├── agent_nodes.py         # LangGraph agent nodes
 ├── agent_graph.py         # LangGraph workflow builder
-├── main.py                # Main application entry point
 │
-├── documents/             # Your documents (auto-created)
+├── mcp/                   # MCP server (optional)
+│   └── vector_store_mcp.py
+│
+├── docs/                  # Your documents (auto-created)
 │   ├── *.txt
 │   ├── *.pdf
 │   └── *.docx
@@ -76,7 +81,7 @@ local-rag-agent/
 
 ```bash
 # Clone or download this project
-cd local-rag-agent
+cd custom_rag_engine
 
 # Create virtual environment
 python -m venv venv
@@ -99,38 +104,73 @@ Create a `.env` file in the project root:
 GOOGLE_API_KEY=your_gemini_api_key_here
 ```
 
-### 4. Run the Application
+### 4. Index Your Documents (Required First Step)
+
+**Before you can chat, you must index your documents:**
+
+```bash
+# Place your documents in the docs/ folder
+# Then run the indexing script
+python index.py
+```
+
+This will:
+- Load all documents from the `docs/` folder
+- Split them into chunks
+- Generate embeddings
+- Store them in the ChromaDB vector database (`chroma_db/`)
+
+**Note:** Indexing is a one-time step (or run again when you add new documents). The vector database persists between sessions.
+
+### 5. Run the Chat Application
 
 ```bash
 python main.py
 ```
 
+The chat interface will use the pre-built vector database for fast retrieval.
+
 ## 📖 Usage Guide
 
-### First-Time Setup
+### Workflow: Index → Chat
 
-1. **Create Sample Documents** (Option 6)
-   - Generates example documents in the `documents/` folder
-   - Good for testing the system
+1. **Add Documents**: Place your files in the `docs/` folder
+2. **Index Documents**: Run `python index.py` to build embeddings
+3. **Chat**: Run `python main.py` to start asking questions
 
-2. **Index Documents** (Option 2)
-   - Index the sample documents or your own documents
-   - The system will process and store them in ChromaDB
+### Indexing (index.py)
 
-3. **Start Chatting** (Option 1)
-   - Ask questions about your documents
-   - The agent automatically decides whether to search documents
+The indexing script processes documents **offline** before runtime:
 
-### Menu Options
+```bash
+python index.py
+```
+
+**What it does:**
+- Scans the `docs/` directory for TXT, PDF, DOCX, JSON, and Markdown files
+- Chunks each document (default: 500 chars with 50 char overlap)
+- Generates embeddings using Sentence Transformers
+- Stores vectors in ChromaDB for fast retrieval
+
+**When to re-run:**
+- After adding new documents
+- After modifying existing documents
+- When changing chunk size or embedding model in `config.py`
+
+### Chat Interface (main.py)
+
+The runtime application provides an interactive chat interface:
+
+```bash
+python main.py
+```
+
+**Menu Options:**
 
 ```
 1. Chat with agent           - Interactive Q&A
-2. Index documents           - Load documents from directory
-3. Index single document     - Load one specific file
-4. View statistics          - See indexed document stats
-5. Clear all documents      - Reset the vector database
-6. Create sample documents  - Generate test documents
-7. Settings                 - View current configuration
+2. View statistics          - See indexed document stats
+3. Settings                 - View current configuration
 0. Exit                     - Close the application
 ```
 
@@ -163,7 +203,7 @@ GEMINI_MODEL = "gemini-1.5-flash"  # or "gemini-1.5-pro"
 # Adjust temperature (0.0 = deterministic, 1.0 = creative)
 TEMPERATURE = 0.7
 
-# Change chunk size
+# Change chunk size (requires re-indexing)
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
 
@@ -173,6 +213,8 @@ N_RETRIEVAL_RESULTS = 3
 # Enable verbose mode for debugging
 VERBOSE_MODE = True
 ```
+
+**Important:** If you change `CHUNK_SIZE`, `CHUNK_OVERLAP`, or `EMBEDDING_MODEL`, you must re-run `python index.py` to rebuild the vector database.
 
 ### Change Embedding Model (config.py)
 
@@ -184,6 +226,8 @@ EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 EMBEDDING_MODEL = "all-mpnet-base-v2"
 ```
 
+**Remember to re-index after changing the embedding model!**
+
 ### Custom Prompts (config.py)
 
 Modify `CLASSIFICATION_PROMPT`, `RAG_ANSWER_PROMPT`, and `DIRECT_ANSWER_PROMPT` to customize agent behavior.
@@ -192,10 +236,9 @@ Modify `CLASSIFICATION_PROMPT`, `RAG_ANSWER_PROMPT`, and `DIRECT_ANSWER_PROMPT` 
 
 ### Method 1: Using the Interface
 
-1. Copy your documents to the `documents/` folder
-2. Run `python main.py`
-3. Select option 2 (Index documents)
-4. Enter the path or press Enter for default
+1. Copy your documents to the `docs/` folder
+2. Run `python index.py` to index them
+3. Run `python main.py` to start chatting
 
 ### Method 2: Programmatically
 
@@ -208,8 +251,9 @@ loader = DocumentLoader()
 vector_store = VectorStore()
 
 # Load and index
-documents = loader.load_directory("./my_documents")
-vector_store.add_documents(documents)
+documents = loader.load_directory("./docs")
+for doc in documents:
+    vector_store.add_document(doc['id'], doc['text'], doc['metadata'])
 ```
 
 ## 🛠️ Advanced Usage
@@ -268,11 +312,17 @@ pip install -r requirements.txt
 GOOGLE_API_KEY=your_actual_key_here
 ```
 
-### Issue: "No documents found"
+### Issue: "No documents found" when chatting
 **Solution:** 
-1. Check documents are in the `documents/` folder
-2. Verify file extensions are supported (.txt, .pdf, .docx, .json, .md)
-3. Use option 6 to create sample documents
+1. Verify documents are in the `docs/` folder
+2. Run `python index.py` to index your documents
+3. Check that file extensions are supported (.txt, .pdf, .docx, .json, .md)
+
+### Issue: "Vector database is empty"
+**Solution:** You forgot to run the indexing step!
+```bash
+python index.py
+```
 
 ### Issue: PDF/DOCX files not loading
 **Solution:** Install optional dependencies
@@ -284,6 +334,12 @@ pip install pypdf python-docx
 **Solution:** Use a smaller embedding model in `config.py`:
 ```python
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"  # Faster
+```
+
+### Issue: Outdated embeddings after adding documents
+**Solution:** Re-run the indexing script
+```bash
+python index.py
 ```
 
 ## 🔒 Privacy & Security
@@ -304,10 +360,15 @@ EMBEDDING_MODEL = "all-MiniLM-L6-v2"  # Faster
 2. **Optimize chunk size** for your documents:
    - Smaller chunks (300-500): Better precision
    - Larger chunks (800-1000): More context
+   - **Remember to re-index after changing!**
 
-3. **Batch document indexing**:
-   - Index multiple documents at once using option 2
-   - Faster than indexing one-by-one
+3. **Pre-index documents**:
+   - Run `index.py` once, then reuse the database across sessions
+   - Much faster than indexing at runtime
+
+4. **Batch document indexing**:
+   - Place all documents in `docs/` folder before running `index.py`
+   - More efficient than indexing one-by-one
 
 ## 🚀 Next Steps
 
@@ -320,15 +381,20 @@ EMBEDDING_MODEL = "all-MiniLM-L6-v2"  # Faster
 5. **Streaming Responses**: Stream answers token-by-token
 6. **Web Interface**: Build a Streamlit or Gradio UI
 7. **API Server**: Create FastAPI endpoints
+8. **Incremental Indexing**: Add new documents without rebuilding entire database
 
-### Example: Adding Web Search
+### Example: Incremental Indexing
 
 ```python
-# In agent_nodes.py, add a web search node
-def web_search_node(state: AgentState) -> AgentState:
-    query = state["user_query"]
-    # Add your web search logic here
-    return state
+# Add to index.py
+def index_new_documents(doc_paths):
+    """Index only specific new documents"""
+    loader = DocumentLoader()
+    vector_store = VectorStore()
+    
+    for path in doc_paths:
+        doc = loader.load_file(path)
+        vector_store.add_document(doc['id'], doc['text'], doc['metadata'])
 ```
 
 ## 📝 File Descriptions
@@ -336,11 +402,22 @@ def web_search_node(state: AgentState) -> AgentState:
 | File | Purpose |
 |------|---------|
 | `config.py` | All configuration settings and prompts |
+| `index.py` | **Offline document indexing and embedding generation** |
+| `main.py` | **Runtime chat interface and agent execution** |
 | `vector_store.py` | ChromaDB vector database management |
 | `document_loader.py` | Load TXT, PDF, DOCX, JSON, MD files |
 | `agent_nodes.py` | Individual agent functions (nodes) |
 | `agent_graph.py` | LangGraph workflow and routing |
-| `main.py` | Interactive CLI interface |
+| `mcp/vector_store_mcp.py` | MCP server (optional) |
+
+## 🔄 Typical Workflow
+
+```
+1. Add documents → docs/
+2. Run: python index.py (builds vector DB)
+3. Run: python main.py (start chatting)
+4. Add more documents → Re-run index.py
+```
 
 ## 🤝 Contributing
 
@@ -349,6 +426,7 @@ Feel free to extend this project! Some ideas:
 - Implement advanced RAG techniques
 - Create a web UI
 - Add more agent types
+- Build incremental indexing
 
 ## 📄 License
 
@@ -365,8 +443,9 @@ MIT License - Feel free to use and modify!
 
 For issues or questions:
 1. Check the troubleshooting section
-2. Review the example usage
-3. Check configuration settings
+2. Verify you've run `python index.py` before chatting
+3. Review the example usage
+4. Check configuration settings
 
 ---
 

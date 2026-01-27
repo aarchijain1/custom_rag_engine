@@ -1,24 +1,18 @@
 """
-Vector Store with Auto-Reindexing
+Vector Store
 Pure ChromaDB + SentenceTransformers
 NO LangChain
 """
 
 import os
-import json
-import hashlib
-from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict
 
 import chromadb
 from sentence_transformers import SentenceTransformer
 
 # ---------------- CONFIG ---------------- #
 
-DOCS_DIR = "docs"
 CHROMA_DIR = "chroma_db"
-INDEX_STATE_FILE = ".index_state.json"
-
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 COLLECTION_NAME = "rag_documents"
 
@@ -47,7 +41,8 @@ class VectorStore:
 
     def _embed(self, texts: List[str]) -> List[List[float]]:
         return self.embedding_model.encode(
-            texts, show_progress_bar=False
+            texts,
+            show_progress_bar=False
         ).tolist()
 
     def _chunk_text(self, text: str) -> List[str]:
@@ -80,12 +75,55 @@ class VectorStore:
             metadatas=metadatas,
         )
 
-    def clear(self):
-        self.collection.delete(where={})
+    def add_documents(self, documents: List[Dict]) -> Dict:
+        successful = 0
+        total_chunks = 0
+
+        for doc in documents:
+            try:
+                self.add_document(
+                    doc_id=doc["id"],
+                    text=doc["text"],
+                    metadata=doc.get("metadata", {})
+                )
+                acknowledged_chunks = len(self._chunk_text(doc["text"]))
+                successful += 1
+                total_chunks += acknowledged_chunks
+            except Exception as e:
+                print(f"⚠ Failed to index {doc['id']}: {e}")
+
+        return {
+            "successful": successful,
+            "total_chunks": total_chunks
+        }
+
+    # ---------------- Clear / Reset ---------------- #
+
+    def clear_all(self) -> bool:
+        """
+        Completely reset the vector store by deleting and recreating the collection.
+        This is the ONLY safe way to clear ChromaDB.
+        """
+        try:
+            self.client.delete_collection(name=COLLECTION_NAME)
+
+            self.collection = self.client.get_or_create_collection(
+                name=COLLECTION_NAME
+            )
+
+            print("✓ Vector store fully reset")
+            return True
+
+        except Exception as e:
+            print(f"✗ Failed to reset vector store: {e}")
+            return False
 
     # ---------------- Query ---------------- #
 
     def search(self, query: str, k: int = N_RETRIEVAL_RESULTS) -> List[Dict]:
+        if self.collection.count() == 0:
+            return []
+
         embedding = self._embed([query])[0]
 
         results = self.collection.query(
@@ -110,70 +148,3 @@ class VectorStore:
             "collection": COLLECTION_NAME,
             "embedding_model": EMBEDDING_MODEL,
         }
-
-
-# ===================================================================
-# AUTO-INDEXING (hash-based)
-# ===================================================================
-
-def _file_hash(path: Path) -> str:
-    h = hashlib.md5()
-    with open(path, "rb") as f:
-        h.update(f.read())
-    return h.hexdigest()
-
-
-def _load_index_state() -> dict:
-    if os.path.exists(INDEX_STATE_FILE):
-        with open(INDEX_STATE_FILE, "r") as f:
-            return json.load(f)
-    return {}
-
-
-def _save_index_state(state: dict):
-    with open(INDEX_STATE_FILE, "w") as f:
-        json.dump(state, f, indent=2)
-
-
-def auto_index_documents(store: VectorStore):
-    os.makedirs(DOCS_DIR, exist_ok=True)
-
-    previous = _load_index_state()
-    current = {}
-
-    changed = False
-
-    for file in Path(DOCS_DIR).glob("*"):
-        if file.is_file():
-            file_hash = _file_hash(file)
-            current[file.name] = file_hash
-            if previous.get(file.name) != file_hash:
-                changed = True
-
-    if previous.keys() != current.keys():
-        changed = True
-
-    if not changed:
-        print("✅ No document changes detected.")
-        return
-
-    print("📄 Documents changed — rebuilding index...")
-
-    store.clear()
-
-    for file in Path(DOCS_DIR).glob("*"):
-        if not file.is_file():
-            continue
-
-        try:
-            text = file.read_text(encoding="utf-8", errors="ignore")
-            store.add_document(
-                doc_id=file.stem,
-                text=text,
-                metadata={"source": file.name},
-            )
-        except Exception as e:
-            print(f"⚠ Failed to index {file.name}: {e}")
-
-    _save_index_state(current)
-    print(f"✅ Index rebuilt ({store.collection.count()} chunks)")

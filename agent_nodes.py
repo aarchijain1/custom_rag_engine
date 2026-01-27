@@ -5,7 +5,8 @@ NO LangChain dependency
 """
 
 from typing import TypedDict, List, Dict, Any
-from vector_store import VectorStore
+# from vector_store import VectorStore
+from mcp.vector_store_mcp import VectorStoreMCP
 from config import CLASSIFICATION_PROMPT, ENABLE_RAG_CLASSIFICATION
 from llm import llm
 
@@ -24,8 +25,9 @@ class AgentState(TypedDict):
 # VECTOR STORE (singleton)
 # -------------------------------------------------------------------
 
-vector_store = VectorStore()
+# vector_store = VectorStore()
 
+vector_store = VectorStoreMCP()
 # -------------------------------------------------------------------
 # HELPERS
 # -------------------------------------------------------------------
