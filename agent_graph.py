@@ -1,10 +1,10 @@
 """
 LangGraph workflow definition
-FINAL STABLE VERSION
+FINAL STABLE VERSION - MCP Edition
 """
 
 from langgraph.graph import StateGraph, END
-from agent_nodes import (
+from agent_nodes_mcp import (
     AgentState,
     master_agent_node,
     retrieval_node,
@@ -68,7 +68,7 @@ class RAGAgent:
         print("✓ RAG Agent ready")
 
     def query(self, user_input: str) -> dict:
-        from agent_nodes import create_initial_state
+        from agent_nodes_mcp import create_initial_state
 
         state = create_initial_state(user_input)
         result = self.graph.invoke(state)
@@ -83,5 +83,5 @@ class RAGAgent:
         return self.query(user_input)["answer"]
 
     def get_stats(self):
-        from agent_nodes import get_vector_store_stats
+        from agent_nodes_mcp import get_vector_store_stats
         return get_vector_store_stats()
