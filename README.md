@@ -75,7 +75,7 @@ local-rag-agent/
 ├── mcp_client.py                 # MCP client with sync wrappers
 │
 ├── agent_nodes_mcp.py            # LangGraph nodes (uses MCP)
-├── agent_graph_mcp.py            # LangGraph workflow
+├── agent_graph.py                # LangGraph workflow
 ├── vector_store.py               # ChromaDB implementation
 ├── document_loader.py            # Multi-format document loader
 ├── llm.py                        # Gemini LLM setup
@@ -155,19 +155,7 @@ This will:
 
 **Note:** Indexing is a one-time step (or run again when adding documents).
 
-### 5. Fix Import (One-Time Setup)
-
-Copy the MCP-compatible agent graph:
-
-```bash
-# Windows
-copy agent_graph_mcp.py agent_graph.py
-
-# Linux/Mac
-cp agent_graph_mcp.py agent_graph.py
-```
-
-### 6. Run the Chat Application
+### 5. Run the Chat Application
 
 ```bash
 python main_mcp.py
@@ -188,8 +176,8 @@ Expected output:
 
 ### Workflow: Index → Chat
 
-1. **Documents Provided**: 6 PDFs and 1 JSON about Toyota Financial Services
-2. **Index Documents**: Run `python index_mcp.py` (builds 90 chunks via MCP)
+1. **Documents Provided**
+2. **Index Documents**: Run `python index_mcp.py` 
 3. **Chat**: Run `python main_mcp.py` to ask questions
 
 ### Indexing (index_mcp.py)
@@ -198,10 +186,6 @@ The indexing script uses **FastMCP** to process documents:
 
 ```bash
 python index_mcp.py
-```
-
-```bash
-python main_mcp.py
 ```
 
 **How it works:**
