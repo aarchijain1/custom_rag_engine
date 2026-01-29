@@ -3,7 +3,7 @@ Main Application - Chat-Only RAG Agent (MCP Version)
 All resources accessed via TRUE MCP over stdio
 """
 
-from agent_graph import RAGAgent
+from agent_graph import MultiAgentRAGSystem as RAGAgent
 from mcp_client import VectorStoreMCP
 from config import DOCUMENTS_DIR
 
