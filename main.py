@@ -1,25 +1,28 @@
 """
-Main Application - Chat-Only RAG Agent (MCP Version)
-All resources accessed via TRUE MCP over stdio
+Main Application - Chat-Only RAG Agent (HTTP MCP Version)
+All resources accessed via HTTP MCP with auto-start
 """
 
 from agent_graph import MultiAgentRAGSystem as RAGAgent
 from mcp_client import VectorStoreMCP
-from config import DOCUMENTS_DIR
+from config import DOCUMENTS_DIR, MCP_SERVER_URL, MCP_AUTO_START
 
 
 def main():
     print("=" * 70)
-    print("🤖 LOCAL RAG AGENT (MCP OVER STDIO)")
-    print("Gemini + ChromaDB + LangGraph + TRUE MCP")
+    print("🤖 LOCAL RAG AGENT (HTTP MCP)")
+    print("Gemini + ChromaDB + LangGraph + HTTP MCP")
     print("=" * 70)
 
     # ------------------------------------------------------------------
-    # Connect to MCP server
+    # Connect to MCP server (auto-starts if needed)
     # ------------------------------------------------------------------
-    print("\n🔌 Connecting to MCP servers...")
-    vector_mcp = VectorStoreMCP()
-    print("✓ Connected to MCP servers")
+    print("\n🔌 Connecting to MCP server...")
+    vector_mcp = VectorStoreMCP(
+        server_url=MCP_SERVER_URL,
+        auto_start_server=MCP_AUTO_START
+    )
+    print("✓ Connected to MCP server")
 
     # ------------------------------------------------------------------
     # Ensure index exists
@@ -29,10 +32,10 @@ def main():
     if stats.get("total_chunks", 0) == 0:
         raise RuntimeError(
             "❌ No index found.\n"
-            "Run `python index_mcp.py` before starting the chat assistant."
+            "Run `python index.py` before starting the chat assistant."
         )
 
-    print(f"\n📚 Loaded index ({stats['total_chunks']} chunks) via MCP")
+    print(f"\n📚 Loaded index ({stats['total_chunks']} chunks) via HTTP MCP")
 
     # ------------------------------------------------------------------
     # Initialize Agent
@@ -55,6 +58,7 @@ def main():
 
             if question.lower() in {"exit", "quit"}:
                 print("\n👋 Goodbye!")
+               
                 break
 
             if not question:
@@ -67,6 +71,8 @@ def main():
 
         except KeyboardInterrupt:
             print("\n\n👋 Session ended")
+            print("\n💡 MCP server is still running.")
+            print("   Use 'python mcp_manage.py stop' to stop it.")
             break
 
         except Exception as e:

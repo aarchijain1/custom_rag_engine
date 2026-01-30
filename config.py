@@ -28,7 +28,21 @@ MAX_OUTPUT_TOKENS = 2048
 
 # Embedding model (runs locally)
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-# Alternative: "all-mpnet-base-v2" (better quality, slower)
+
+# ============================================================================
+# MCP Server Configuration - CORRECTED
+# ============================================================================
+
+# Unified MCP Server settings
+MCP_SERVER_HOST = "127.0.0.1"
+MCP_SERVER_PORT = 8765
+MCP_SERVER_URL = f"http://{MCP_SERVER_HOST}:{MCP_SERVER_PORT}"  # No /mcp suffix!
+
+# Auto-start server when agents need it
+MCP_AUTO_START = True
+
+# Server script path
+MCP_SERVER_SCRIPT = "mcp_server_unified.py"
 
 # ============================================================================
 # Vector Database Configuration
@@ -64,9 +78,9 @@ DOCUMENTS_DIR = "./documents"
 # ============================================================================
 
 # Agent behavior settings
-ENABLE_RAG_CLASSIFICATION = True  # Let agent decide when to use RAG
-VERBOSE_MODE = False  # Show debug information
-SHOW_RETRIEVED_DOCS = False  # Display retrieved document chunks
+ENABLE_RAG_CLASSIFICATION = True
+VERBOSE_MODE = False
+SHOW_RETRIEVED_DOCS = False
 
 # ============================================================================
 # Paths
@@ -104,7 +118,6 @@ Question:
 Answer with ONLY one word:
 rag or direct
 """
-
 
 RAG_ANSWER_PROMPT = """You are a helpful assistant. Answer the user's question based ONLY on the provided context.
 

@@ -1,23 +1,23 @@
-"""
-Indexing Application - Offline RAG Index Builder (MCP Version)
-Run this ONLY when documents change
-Uses TRUE MCP over stdio
-"""
-
 from mcp_client import VectorStoreMCP, DocumentLoaderMCP
-from config import DOCUMENTS_DIR
+from config import DOCUMENTS_DIR, MCP_SERVER_URL, MCP_AUTO_START
 
 def main():
     print("=" * 70)
-    print("📚 RAG INDEXER (MCP OVER STDIO)")
-    print("Loads → Chunks → Embeds → Stores in ChromaDB via MCP")
+    print("📚 RAG INDEXER (HTTP MCP)")
+    print("Loads → Chunks → Embeds → Stores in ChromaDB via HTTP MCP")
     print("=" * 70)
 
-    # MCP clients (communicating via stdio)
-    print("\n🔌 Connecting to MCP servers...")
-    vector_mcp = VectorStoreMCP()
-    loader_mcp = DocumentLoaderMCP()
-    print("✓ Connected to MCP servers")
+    # HTTP MCP clients (auto-starts server if needed)
+    print("\n🔌 Connecting to MCP server...")
+    vector_mcp = VectorStoreMCP(
+        server_url=MCP_SERVER_URL,
+        auto_start_server=MCP_AUTO_START
+    )
+    loader_mcp = DocumentLoaderMCP(
+        server_url=MCP_SERVER_URL,
+        auto_start_server=MCP_AUTO_START
+    )
+    print("✓ Connected to MCP server")
 
     # --------------------------------------------------
     # Clear existing index (full rebuild)
@@ -61,7 +61,7 @@ def main():
     # --------------------------------------------------
     # Index documents
     # --------------------------------------------------
-    print("\n⚙️ Indexing documents via MCP...")
+    print("\n⚙️ Indexing documents via HTTP MCP...")
     result = vector_mcp.add_documents(documents)
 
     print("\n✅ Indexing complete")
@@ -94,6 +94,9 @@ def main():
             print(f"  {k}: {v}")
     else:
         print(f"  Stats: {stats}")
+    
+    print("\n✨ Indexing complete! MCP server will remain running.")
+   
 
 
 if __name__ == "__main__":

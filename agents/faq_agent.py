@@ -1,13 +1,14 @@
 """
 FAQ Sub-Agent
 Handles general Toyota Financial Services questions using RAG
+Updated to use HTTP MCP client
 """
 
 from typing import Literal
 from agents.shared_state import AgentState
-from mcp_client import VectorStoreMCP
+from mcp_client import VectorStoreMCP 
 from llm import llm
-from config import N_RETRIEVAL_RESULTS
+from config import N_RETRIEVAL_RESULTS, MCP_SERVER_URL, MCP_AUTO_START
 
 
 FAQ_RAG_PROMPT = """
@@ -68,7 +69,7 @@ class FAQAgent:
     FAQ Sub-Agent
     
     Responsibilities:
-    - Search knowledge base via MCP
+    - Search knowledge base via MCP (HTTP transport)
     - Synthesize retrieved documents
     - Provide clear, concise answers
     - Include source citations
@@ -76,11 +77,16 @@ class FAQAgent:
     
     def __init__(self):
         self.name = "faq"
-        self.vector_store = VectorStoreMCP()
+        # Initialize with HTTP MCP client (auto-starts server if needed)
+        self.vector_store = VectorStoreMCP(
+            server_url=MCP_SERVER_URL,
+            auto_start_server=MCP_AUTO_START
+        )
     
     def retrieve_documents(self, state: AgentState) -> AgentState:
         """
-        Retrieve relevant documents via MCP
+        Retrieve relevant documents via MCP (HTTP transport)
+        MCP server starts automatically on first call if auto_start=True
         """
         try:
             docs = self.vector_store.search(
@@ -109,6 +115,7 @@ class FAQAgent:
     def generate_answer(self, state: AgentState) -> AgentState:
         """
         Generate answer using retrieved context
+        Pure Python + LLM - NO MCP involved here
         """
         if not state["context"]:
             state["final_answer"] = "No relevant information found in the knowledge base."
@@ -130,9 +137,10 @@ class FAQAgent:
     def process(self, state: AgentState) -> AgentState:
         """
         Full FAQ agent workflow: retrieve → answer
+        MCP only used in retrieve step
         """
-        state = self.retrieve_documents(state)
-        state = self.generate_answer(state)
+        state = self.retrieve_documents(state)  # Uses MCP
+        state = self.generate_answer(state)      # No MCP
         return state
 
 
