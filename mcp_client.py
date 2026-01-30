@@ -24,7 +24,7 @@ class UnifiedMCPClient:
     ):
         self.server_url = server_url.rstrip('/')
         self.health_url = f"{self.server_url}/"
-        self.tools_url = f"{self.server_url}/tools/call"
+        self.tools_url = f"{self.server_url}/tools/call/simple"
         self.auto_start = auto_start_server
         self.server_script = server_script
         self.server_process = None
@@ -54,9 +54,7 @@ class UnifiedMCPClient:
         if self.is_windows:
             self.server_process = subprocess.Popen(
                 [sys.executable, self.server_script],
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
             )
         else:
             self.server_process = subprocess.Popen(

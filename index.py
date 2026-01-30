@@ -1,5 +1,10 @@
-from mcp_client import VectorStoreMCP, DocumentLoaderMCP
-from config import DOCUMENTS_DIR, MCP_SERVER_URL, MCP_AUTO_START
+"""
+Document Indexer - Simple Clean Version
+Uses Simple MCP Manager for all operations
+"""
+
+from config import DOCUMENTS_DIR
+from mcp_manager import (clear_vector_store, load_documents, index_documents, get_vector_stats)
 
 def main():
     print("=" * 70)
@@ -7,38 +12,22 @@ def main():
     print("Loads → Chunks → Embeds → Stores in ChromaDB via HTTP MCP")
     print("=" * 70)
 
-    # HTTP MCP clients (auto-starts server if needed)
-    print("\n🔌 Connecting to MCP server...")
-    vector_mcp = VectorStoreMCP(
-        server_url=MCP_SERVER_URL,
-        auto_start_server=MCP_AUTO_START
-    )
-    loader_mcp = DocumentLoaderMCP(
-        server_url=MCP_SERVER_URL,
-        auto_start_server=MCP_AUTO_START
-    )
-    print("✓ Connected to MCP server")
-
     # --------------------------------------------------
     # Clear existing index (full rebuild)
     # --------------------------------------------------
     print("\n🧹 Clearing existing vector index...")
-    vector_mcp.clear_all()
+    clear_vector_store()
 
     # --------------------------------------------------
     # Load documents
     # --------------------------------------------------
     print("\n📄 Loading documents via MCP...")
-    documents = loader_mcp.load_directory(
-        str(DOCUMENTS_DIR),
-        recursive=True
-    )
+    documents = load_documents(str(DOCUMENTS_DIR), recursive=True)
 
     # Ensure documents is a list
     if not isinstance(documents, list):
         print(f"⚠️ Warning: documents is {type(documents)}, converting to list")
         if isinstance(documents, dict):
-            # If it's a single document dict, wrap it in a list
             documents = [documents]
         else:
             print(f"❌ Error: Cannot convert {type(documents)} to list")
@@ -62,7 +51,7 @@ def main():
     # Index documents
     # --------------------------------------------------
     print("\n⚙️ Indexing documents via HTTP MCP...")
-    result = vector_mcp.add_documents(documents)
+    result = index_documents(documents)
 
     print("\n✅ Indexing complete")
     
@@ -87,7 +76,7 @@ def main():
     # Final stats
     # --------------------------------------------------
     print("\n📊 Vector Store Stats")
-    stats = vector_mcp.stats()
+    stats = get_vector_stats()
     
     if isinstance(stats, dict):
         for k, v in stats.items():
@@ -95,8 +84,7 @@ def main():
     else:
         print(f"  Stats: {stats}")
     
-    print("\n✨ Indexing complete! MCP server will remain running.")
-   
+    print("\n✨ Indexing complete! MCP server will be stopped automatically.")
 
 
 if __name__ == "__main__":
