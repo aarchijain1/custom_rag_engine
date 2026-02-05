@@ -6,7 +6,7 @@ Makes it easy to add/remove agents without changing graph code
 
 from typing import Dict, Callable
 from agents.shared_state import AgentState
-from agents.faq_agent import faq_agent_node
+from agents.claude_faq_agent import claude_faq_agent_node
 from agents.planner_agent import planner_agent_node
 from agents.payment_agent import payment_agent_node
 
@@ -28,11 +28,11 @@ class AgentRegistry:
     def _register_default_agents(self):
         """Register the default sub-agents"""
         
-        # FAQ Agent (Active)
+        # FAQ Agent (Active - Claude SDK)
         self.register(
             name="faq",
-            node_func=faq_agent_node,
-            description="Handles general TFS questions using RAG",
+            node_func=claude_faq_agent_node,
+            description="Handles general TFS questions using Claude SDK with RAG",
             enabled=True,
             requires_mcp=True,
             mcp_resources=["vector_store"]

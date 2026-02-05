@@ -1,17 +1,17 @@
 """
-Main Application - Simple Clean Version
-Chat-Only RAG Agent with simple MCP management
+Main Application - Multi-Agent RAG System
+Chat interface with Master Agent routing to specialized sub-agents
 """
 
-from agent_graph import MultiAgentRAGSystem as RAGAgent
+from agent_graph import MultiAgentRAGSystem 
 from config import DOCUMENTS_DIR
 from mcp_manager import get_vector_stats
 
 
 def main():
     print("=" * 70)
-    print("🤖 LOCAL RAG AGENT (HTTP MCP)")
-    print("Gemini + ChromaDB + LangGraph + HTTP MCP")
+    print("🤖 MULTI-AGENT RAG SYSTEM")
+    print("Master Agent + Claude FAQ + MCP + ChromaDB")
     print("=" * 70)
 
     # ------------------------------------------------------------------
@@ -29,17 +29,18 @@ def main():
     print(f"✓ Loaded index ({stats['total_chunks']} chunks) via HTTP MCP")
 
     # ------------------------------------------------------------------
-    # Initialize Agent
+    # Initialize Multi-Agent System
     # ------------------------------------------------------------------
-    print("\n🔧 Initializing RAG Agent...")
-    agent = RAGAgent()
-    print("✓ RAG Agent ready")
+    print("\n🔧 Initializing Multi-Agent System...")
+    agent = MultiAgentRAGSystem()
+    print("✓ Multi-Agent System ready")
 
     # ------------------------------------------------------------------
-    # Chat Loop
+    # Chat Interface
     # ------------------------------------------------------------------
     print("\n" + "=" * 30)
-    print("💬 CHAT STARTED")
+    print("💬 MULTI-AGENT CHAT")
+    print("Master Agent routes your questions")
     print("Type 'exit' or 'quit' to stop")
     print("=" * 30)
 

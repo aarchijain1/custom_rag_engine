@@ -17,6 +17,12 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
     raise ValueError("GOOGLE_API_KEY not found in .env file")
 
+# Anthropic Claude API configuration
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+CLAUDE_MODEL = "claude-sonnet-4-20250514"
+CLAUDE_TEMPERATURE = 0.7
+CLAUDE_MAX_TOKENS = 2048
+
 # ============================================================================
 # Model Configuration
 # ============================================================================
