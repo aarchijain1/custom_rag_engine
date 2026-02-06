@@ -8,7 +8,7 @@ from typing import Dict, Callable
 from agents.shared_state import AgentState
 from agents.claude_faq_agent import claude_faq_agent_node
 from agents.planner_agent import planner_agent_node
-from agents.payment_agent import payment_agent_node
+from agents.claude_payment_agent import claude_payment_agent_node
 
 
 class AgentRegistry:
@@ -38,6 +38,16 @@ class AgentRegistry:
             mcp_resources=["vector_store"]
         )
         
+        # Payment Agent (Active - Claude SDK)
+        self.register(
+            name="payment",
+            node_func=claude_payment_agent_node,
+            description="Processes payments, checks payment history, and handles payment-related queries",
+            enabled=True,  # ✅ Now enabled
+            requires_mcp=False,  # No MCP needed - uses Claude tools directly
+            mcp_resources=[]
+        )
+        
         # Planner Agent (Future)
         self.register(
             name="planner",
@@ -46,16 +56,6 @@ class AgentRegistry:
             enabled=False,  # Set to True when implemented
             requires_mcp=True,
             mcp_resources=["planner"]
-        )
-        
-        # Payment Agent (Future)
-        self.register(
-            name="payment",
-            node_func=payment_agent_node,
-            description="Calculates payments and financial information",
-            enabled=False,  # Set to True when implemented
-            requires_mcp=True,
-            mcp_resources=["payment_calculator"]
         )
     
     def register(
@@ -71,7 +71,7 @@ class AgentRegistry:
         Register a new agent
         
         Args:
-            name: Agent identifier (e.g., "faq", "planner")
+            name: Agent identifier (e.g., "faq", "planner", "payment")
             node_func: LangGraph node function
             description: What this agent does
             enabled: Whether agent is active
