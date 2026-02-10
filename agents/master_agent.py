@@ -5,6 +5,7 @@ Routes queries to appropriate sub-agents using tool-based routing
 
 from typing import Literal
 from agents.shared_state import AgentState
+from agents.registry import get_enabled_agents
 from llm import llm
 
 
@@ -34,6 +35,21 @@ Analyze the question and respond with ONLY the agent name that should handle it:
 
 Agent:
 """
+
+GREETING_PROMPT = """You are a friendly Toyota Financial Services assistant. The user said: "{question}"
+
+Respond with a brief, welcoming message (1-2 sentences). Keep it natural and helpful."""
+
+
+def _parse_agent_from_response(text: str) -> str:
+    """Extract agent name from LLM response (handles 'faq', 'faq.', 'The agent is faq', etc.)"""
+    text = text.strip().lower()
+    valid = {"faq", "planner", "payment", "none"}
+    words = text.replace(".", " ").replace(",", " ").split()
+    for w in words:
+        if w in valid:
+            return w
+    return "faq"  # default
 
 
 class MasterAgent:
@@ -70,14 +86,25 @@ class MasterAgent:
         )
         
         response = llm.invoke(prompt)
-        next_agent = response.content.strip().lower()
+        next_agent = _parse_agent_from_response(response.content)
         
         # Validate and set next agent
         if next_agent not in self.available_agents and next_agent != "none":
             next_agent = "faq"  # Default to FAQ if invalid
         
+        # Only route to enabled agents; fallback to faq for disabled ones (e.g. planner)
+        enabled = set(get_enabled_agents().keys())
+        if next_agent != "none" and next_agent not in enabled:
+            next_agent = "faq"
+        
         state["next_agent"] = next_agent
         state["agent_history"].append("master")
+        
+        # When routing to "none" (greetings/casual), provide a response so user doesn't get empty output
+        if next_agent == "none":
+            greeting_prompt = GREETING_PROMPT.format(question=state["question"])
+            greeting_response = llm.invoke(greeting_prompt)
+            state["final_answer"] = greeting_response.content.strip()
         
         return state
     

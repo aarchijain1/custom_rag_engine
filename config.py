@@ -67,7 +67,7 @@ CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
 
 # Retrieval settings
-N_RETRIEVAL_RESULTS = 3
+N_RETRIEVAL_RESULTS = 5
 
 # ============================================================================
 # Document Processing Configuration
